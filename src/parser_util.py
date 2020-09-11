@@ -18,7 +18,7 @@ def get_parser():
     parser.add_argument('-nep', '--epochs',
                         type=int,
                         help='number of epochs to train for',
-                        default=100)
+                        default=1)
 
     parser.add_argument('-lr', '--learning_rate',
                         type=float,
@@ -43,7 +43,7 @@ def get_parser():
     parser.add_argument('-cTr', '--classes_per_it_tr',
                         type=int,
                         help='number of random classes per episode for training, default=60',
-                        default=60)
+                        default=5)
 
     parser.add_argument('-nsTr', '--num_support_tr',
                         type=int,

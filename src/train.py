@@ -4,6 +4,7 @@ from prototypical_loss import prototypical_loss as loss_fn
 from omniglot_dataset import OmniglotDataset
 from protonet import ProtoNet
 from parser_util import get_parser
+from mnistNShot import MnistNShot
 
 from tqdm import tqdm
 import numpy as np
@@ -25,9 +26,9 @@ def init_dataset(opt, mode):
     dataset = OmniglotDataset(mode=mode, root=opt.dataset_root)
     n_classes = len(np.unique(dataset.y))
     if n_classes < opt.classes_per_it_tr or n_classes < opt.classes_per_it_val:
-        raise(Exception('There are not enough classes in the dataset in order ' +
-                        'to satisfy the chosen classes_per_it. Decrease the ' +
-                        'classes_per_it_{tr/val} option and try again.'))
+        raise (Exception('There are not enough classes in the dataset in order ' +
+                         'to satisfy the chosen classes_per_it. Decrease the ' +
+                         'classes_per_it_{tr/val} option and try again.'))
     return dataset
 
 
@@ -174,6 +175,30 @@ def test(opt, test_dataloader, model):
     return avg_acc
 
 
+def test_mnist(opt, test_dataloader, model):
+    '''
+    Test the model trained with the prototypical learning algorithm
+    '''
+    device = 'cuda:0' if torch.cuda.is_available() and opt.cuda else 'cpu'
+    avg_acc = list()
+    for epoch in range(10):
+        x_spt, y_spt, x_qry, y_qry = test_dataloader.next('test')
+        for x_spt_one, y_spt_one, x_qry_one, y_qry_one in zip(x_spt, y_spt, x_qry, y_qry):
+            x_spt_one, y_spt_one, x_qry_one, y_qry_one = torch.from_numpy(x_spt_one), torch.from_numpy(y_spt_one), \
+                                                         torch.from_numpy(x_qry_one), torch.from_numpy(y_qry_one)
+            x = torch.cat((x_spt_one, x_qry_one), 0)
+            y = torch.cat((y_spt_one, y_qry_one), 0)
+            x, y = x.to(device), y.to(device)
+            model_output = model(x)
+            _, acc = loss_fn(model_output, target=y,
+                             n_support=opt.num_support_val)
+            avg_acc.append(acc.item())
+    avg_acc = np.mean(avg_acc)
+    print('MNIST Test Acc: {}'.format(avg_acc))
+
+    return avg_acc
+
+
 def eval(opt):
     '''
     Initialize everything and train
@@ -184,7 +209,17 @@ def eval(opt):
         print("WARNING: You have a CUDA device, so you should probably run with --cuda")
 
     init_seed(options)
+
     test_dataloader = init_dataset(options)[-1]
+
+    # mnist test data loader
+    mnist_dataloader = MnistNShot(MNIST_ROOT,
+                                  batchsz=options.iterations,
+                                  n_way=options.classes_per_it_tr,
+                                  k_shot=options.num_support_tr,
+                                  k_query=options.num_query_tr,
+                                  imgsz=28)
+
     model = init_protonet(options)
     model_path = os.path.join(opt.experiment_root, 'best_model.pth')
     model.load_state_dict(torch.load(model_path))
@@ -192,6 +227,10 @@ def eval(opt):
     test(opt=options,
          test_dataloader=test_dataloader,
          model=model)
+
+    test_mnist(opt=options,
+               test_dataloader=mnist_dataloader,
+               model=model)
 
 
 def main():
@@ -211,6 +250,14 @@ def main():
     val_dataloader = init_dataloader(options, 'val')
     # trainval_dataloader = init_dataloader(options, 'trainval')
     test_dataloader = init_dataloader(options, 'test')
+
+    # mnist test data loader
+    mnist_dataloader = MnistNShot(MNIST_ROOT,
+                                  batchsz=options.iterations,
+                                  n_way=options.classes_per_it_tr,
+                                  k_shot=options.num_support_tr,
+                                  k_query=options.num_query_tr,
+                                  imgsz=28)
 
     model = init_protonet(options)
     optim = init_optim(options, model)
@@ -233,6 +280,11 @@ def main():
          test_dataloader=test_dataloader,
          model=model)
 
+    # test mnist
+    test_mnist(opt=options,
+               test_dataloader=mnist_dataloader,
+               model=model)
+
     # optim = init_optim(options, model)
     # lr_scheduler = init_lr_scheduler(options, optim)
 
@@ -251,4 +303,5 @@ def main():
 
 
 if __name__ == '__main__':
+    MNIST_ROOT = "/Users/zber/ProgramDev/MAML-Pytorch/MNIST"
     main()
